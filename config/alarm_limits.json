@@ -1,0 +1,18 @@
+{
+    "battery_voltage": {
+        "warning_low": 24.0,
+        "warning_high": 30.0,
+        "critical_low": 22.0,
+        "critical_high": 31.0
+    },
+    "obc_temperature": {
+        "warning_low": 23.0,
+        "warning_high": 27.0,
+        "critical_low": 0.0,
+        "critical_high": 50.0
+    },
+    "comms_signal_strength": {
+        "warning_low": -100.0,
+        "critical_low": -110.0
+    }
+}

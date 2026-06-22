@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GroundOps Console - Mission Dashboard</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: monospace; background: #1a1a2e; color: #eee; }
+        h1 { padding: 10px 20px; background: #16213e; font-size: 1.2em; }
+        #map { width: 100%; height: 400px; }
+        .panel { padding: 15px 20px; }
+        .panel h2 { font-size: 1em; margin-bottom: 10px; color: #0f9d58; }
+        /* Timeline bars */
+        .timeline-bar { display: flex; align-items: center; margin: 4px 0; }
+        .timeline-bar .label { width: 120px; font-size: 0.8em; }
+        .timeline-bar .bar { height: 20px; background: #4285f4; border-radius: 3px;
+                             display: flex; align-items: center; padding: 0 6px;
+                             font-size: 0.7em; color: #fff; min-width: 40px; }
+        /* Telemetry table */
+        table { width: 100%; border-collapse: collapse; font-size: 0.8em; }
+        th, td { padding: 4px 8px; border: 1px solid #333; text-align: left; }
+        th { background: #16213e; }
+        .WARNING { background: #f9a825; color: #000; }
+        .CRITICAL { background: #d32f2f; color: #fff; }
+        .NOMINAL { background: transparent; }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #16213e;
+            padding: 10px 20px;
+            border-bottom: 2px solid #0f9d58;
+        }
+        .header-container h1 {
+            padding: 0;
+            background: transparent;
+        }
+        .nav-button {
+            background: #0f9d58;
+            color: #fff;
+            text-decoration: none;
+            padding: 8px 16px;
+            font-family: monospace;
+            font-weight: bold;
+            border-radius: 4px;
+            border: 1px solid #10b981;
+            transition: background 0.2s ease;
+        }
+        .nav-button:hover {
+            background: #10b981;
+            cursor: pointer;
+        }
+
+        /* Hide native spinner arrows in Chrome, Safari, Edge, and Opera */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Hide native spinner arrows in Firefox */
+        input[type="number"] {
+            -moz-appearance: textfield;
+            appearance: null;
+        }
+
+    </style>
+</head>
+<body>
+    
+    <div class="header-container">
+        <h1>GroundOps Console - Mission Dashboard</h1>
+        <a href="/telemetry" class="nav-button">➔ View Telemetry Monitor</a>
+    </div>
+    <!-- Satellite Selector Panel -->
+    <div class="panel" style="background: #16213e; padding: 10px 20px;">
+        <label for="satellite-selector" style="font-weight: bold; margin-right: 10px;">Target Satellite Tracking:</label>
+        <select id="satellite-selector" onchange="handleSatelliteChange(this.value)" style="background: #1a1a2e; color: #fff; border: 1px solid #0f9d58; padding: 6px; font-family: monospace;">
+            <option value="">-- Select Target Spacecraft --</option>
+        </select>
+    </div>
+    
+    <!-- Deploy Custom Spacecraft Panel -->
+    <div class="panel" style="background: #16213e; padding: 15px 20px; border-top: 1px solid #1a1a2e;">
+        <h2 style="font-size: 1em; margin-bottom: 10px; color: #0f9d58;">Deploy Custom Satellite (Live NORAD Catalog)</h2>
+        <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+            <label style="font-size: 0.9em;">NORAD Catalog ID: 
+                <input type="number" id="new-sat-norad" placeholder="e.g. 43013" step="1"
+                    style="background: #1a1a2e; color: #fff; border: 1px solid #0f9d58; padding: 6px; width: 120px; font-family: monospace;">
+            </label>
+            <button onclick="submitCustomSatellite()" 
+                    style="background: #0f9d58; color: #fff; border: none; padding: 6px 14px; font-family: monospace; cursor: pointer; font-weight: bold; border-radius: 4px;">
+                Fetch & Deploy Satellite
+            </button>
+        </div>
+    </div>
+
+    <!-- Ground Station Configuration Panel -->
+    <div class="panel" style="background: #16213e; padding: 15px 20px; border-top: 1px solid #1a1a2e;">
+        <h2 style="font-size: 1em; margin-bottom: 10px; color: #0f9d58;">Configure Ground Station Location</h2>
+        <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+            
+            <label style="font-size: 0.9em; display: flex; align-items: center; gap: 5px;">Latitude: 
+                <input type="number" id="gs-lat" value="28.5721" step="any" 
+                    style="background: #1a1a2e; color: #fff; border: 1px solid #0f9d58; padding: 6px; width: 100px; font-family: monospace;">
+                <button onclick="adjustCoordinate('gs-lat', 0.1)" style="background: #111; color: #01ff56; border: 1px solid #0f9d58; padding: 2px 8px; font-family: monospace; cursor: pointer;">+</button>
+                <button onclick="adjustCoordinate('gs-lat', -0.1)" style="background: #111; color: #ff2a6d; border: 1px solid #0f9d58; padding: 2px 8px; font-family: monospace; cursor: pointer;">-</button>
+            </label>
+
+            <label style="font-size: 0.9em; display: flex; align-items: center; gap: 5px;">Longitude: 
+                <input type="number" id="gs-lon" value="-80.6480" step="any" 
+                    style="background: #1a1a2e; color: #fff; border: 1px solid #0f9d58; padding: 6px; width: 100px; font-family: monospace;">
+                <button onclick="adjustCoordinate('gs-lon', 0.1)" style="background: #111; color: #01ff56; border: 1px solid #0f9d58; padding: 2px 8px; font-family: monospace; cursor: pointer;">+</button>
+                <button onclick="adjustCoordinate('gs-lon', -0.1)" style="background: #111; color: #ff2a6d; border: 1px solid #0f9d58; padding: 2px 8px; font-family: monospace; cursor: pointer;">-</button>
+            </label>
+
+            <button onclick="updateGroundStationFromInputs()" 
+                    style="background: #0f9d58; color: #fff; border: none; padding: 6px 14px; font-family: monospace; cursor: pointer; font-weight: bold; border-radius: 4px;">
+                Update Station Coordinates
+            </button>
+        </div>
+    </div>
+    
+    <!-- Leaflet Map -->
+    <div id="map"></div>
+
+    <!-- Active Orbital State Panel -->
+    <div class="panel" style="padding: 15px 20px; border-top: 1px solid #1a1a2e;">
+        <h2 style="font-size: 1em; margin-bottom: 10px; color: #0f9d58;">Spacecraft Coordinates</h2>
+        <div style="display: flex; gap: 30px; font-family: monospace; font-size: 0.9em; flex-wrap: wrap;">
+            <div>Target Name: <span id="live-name" style="color: #05d9e8; font-weight: bold;">N/A</span></div>
+            <div>Latitude: <span id="live-lat" style="color: #ff2a6d; font-weight: bold;">N/A</span></div>
+            <div>Longitude: <span id="live-lon" style="color: #ff2a6d; font-weight: bold;">N/A</span></div>
+            <div>Altitude: <span id="live-alt" style="color: #ff2a6d; font-weight: bold;">N/A</span></div>
+            <div>Time (UTC): <span id="live-time" style="color: #ffffff; font-weight: bold;">N/A</span></div>
+        </div>
+    </div>
+
+    <!-- Contact Timeline -->
+    <div class="panel">
+        <h2>Contact Timeline (Next 24h)</h2>
+        <div id="timeline"></div>
+    </div>
+
+    <!-- Telemetry Panel -->
+    <div class="panel">
+        <h2>Live Telemetry Monitor</h2>
+        <table id="telemetry-table">
+            <thead><tr><th>Time</th><th>Satellite</th><th>Channel</th><th>Value</th><th>State</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- Log Table -->
+    <div class="panel">
+        <h2>Mission Log (Last 50 Actions)</h2>
+        <table id="log-table">
+            <thead><tr><th>Time</th><th>Type</th><th>Details</th><th>Outcome</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <script>
+        // --- Configuration & State ---
+        var activeSatId = null;       // Tracks which satellite is currently selected
+        var gsMarker = null;          // Holds the active Leaflet marker instance
+        var satMarkers = {};          // Stores active satellite markers
+        var satTracks = {};           // Stores active polyline tracks
+
+        
+        // Retrieve the last inputted coordinates from browser memory if they exist
+        var savedLat = localStorage.getItem('gs_lat');
+        var savedLon = localStorage.getItem('gs_lon');
+
+        var currentGS = {
+            name: savedLat ? 'Custom Observer (' + parseFloat(savedLat).toFixed(4) + ', ' + parseFloat(savedLon).toFixed(4) + ')' : "Kennedy Space Center",
+            lat: savedLat ? parseFloat(savedLat) : 28.5721,
+            lon: savedLon ? parseFloat(savedLon) : -80.6481,
+            alt_km: 0.003
+        };
+
+
+        // Unified Track Color (Sleek Cyan)
+        var TRACK_COLOR = "#05d9e8";
+
+        // --- Initialize Leaflet Map ---
+        var map = L.map('map').setView([currentGS.lat, currentGS.lon], 2);
+
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 18,
+            noWrap: true  // Prevents map tiles from repeating horizontally
+        }).addTo(map);
+
+        // --- Draw Ground Station Marker ---
+        function drawGroundStation() {
+            if (gsMarker) {
+                map.removeLayer(gsMarker);
+            }
+            // Plot prominent 📡 marker at updated coordinates
+            gsMarker = L.marker([currentGS.lat, currentGS.lon], {
+                icon: L.divIcon({
+                    className: 'gs-icon-large',
+                    html: '📡',
+                    iconSize: [48, 48],
+                    iconAnchor: [24, 24]
+                })
+            }).addTo(map).bindPopup(currentGS.name);
+            
+            map.panTo([currentGS.lat, currentGS.lon]);
+        }
+
+        // --- Update Observer Coordinates from Inputs ---
+        
+        function updateGroundStationFromInputs() {
+            var latInput = parseFloat(document.getElementById('gs-lat').value);
+            var lonInput = parseFloat(document.getElementById('gs-lon').value);
+
+            if (isNaN(latInput) || latInput < -90 || latInput > 90) {
+                alert("Latitude must be a valid number between -90 and 90.");
+                return;
+            }
+            if (isNaN(lonInput) || lonInput < -180 || lonInput > 180) {
+                alert("Longitude must be a valid number between -180 and 180.");
+                return;
+            }
+
+            currentGS.lat = latInput;
+            currentGS.lon = lonInput;
+            currentGS.name = 'Custom Observer (' + latInput.toFixed(4) + ', ' + lonInput.toFixed(4) + ')';
+
+            // === SAVE TO BROWSER MEMORY ===
+            localStorage.setItem('gs_lat', latInput);
+            localStorage.setItem('gs_lon', lonInput);
+
+            drawGroundStation();
+
+            if (activeSatId) {
+                loadTimeline();
+            }
+        }
+
+        // --- Populate Dropdown Menu on Startup ---
+        async function initSatellites() {
+            var res = await fetch('/satellites');
+            var data = await res.json();
+            var selector = document.getElementById('satellite-selector');
+            
+            data.satellites.forEach(function(sat) {
+                var opt = document.createElement('option');
+                opt.value = sat.id;
+                opt.textContent = sat.name;
+                selector.appendChild(opt);
+            });
+        }
+
+        // --- Meridian Splitting (180 Crossing Check) ---
+        function splitTrackOnMeridian(trackPoints) {
+            if (!trackPoints || !Array.isArray(trackPoints)) {
+                return [];
+            }
+            var segments = [];
+            var currentSegment = [];
+            
+            trackPoints.forEach(function(pt, i) {
+                if (i > 0) {
+                    var prevPt = trackPoints[i - 1];
+                    if (Math.abs(pt.lon - prevPt.lon) > 180) {
+                        segments.push(currentSegment);
+                        currentSegment = [];
+                    }
+                }
+                currentSegment.push([pt.lat, pt.lon]);
+            });
+            
+            if (currentSegment.length > 0) {
+                segments.push(currentSegment);
+            }
+            return segments;
+        }
+        
+        function formatLogTime(timestamp) {
+            // Use provided timestamp, otherwise current time
+            const d = timestamp !== undefined ? new Date(timestamp) : new Date();
+            
+            // If the timestamp was invalid, d will be "Invalid Date" – we fallback to now
+            if (isNaN(d.getTime())) {
+                console.warn('Invalid timestamp provided, falling back to current time');
+                d = new Date();
+            }
+
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZoneName: 'shortOffset'
+            });
+            const parts = formatter.formatToParts(d);  // use the same date object
+            const offset = parts.find(p => p.type === 'timeZoneName').value;
+
+            const dateAndTime = `${d.toLocaleString()} ${offset}`;
+            return dateAndTime;
+        }
+
+        // --- Target Selection Handler ---
+        async function handleSatelliteChange(selectedId) {
+            
+            // Reset the live coordinate and time readouts when switching selections
+            document.getElementById('live-name').textContent = selectedId ? selectedId.toUpperCase() : 'N/A';
+            document.getElementById('live-lat').textContent = 'Calculating...';
+            document.getElementById('live-lon').textContent = 'Calculating...';
+            document.getElementById('live-alt').textContent = 'Calculating...';
+            document.getElementById('live-time').textContent = 'Calculating...';
+
+            if (activeSatId) {
+                if (satMarkers[activeSatId]) map.removeLayer(satMarkers[activeSatId]);
+                if (satTracks[activeSatId]) map.removeLayer(satTracks[activeSatId]);
+            }
+            
+            activeSatId = selectedId || null;
+            if (!activeSatId) return;
+            
+            try {
+                var res = await fetch('/satellites');
+                var data = await res.json();
+                var satMeta = null;
+                
+                data.satellites.forEach(function(s) {
+                    if (s.id === activeSatId) {
+                        satMeta = s;
+                    }
+                });
+                
+                if (!satMeta) return;
+
+                // Plot target satellite as a sleek, small red circle
+                satMarkers[activeSatId] = L.circleMarker([0, 0], {
+                    radius: 6,
+                    color: '#000000',
+                    fillColor: '#ff3366',
+                    fillOpacity: 0.9,
+                    weight: 2
+                }).addTo(map).bindPopup(satMeta.name);
+                
+                var trackRes = await fetch('/satellites/' + activeSatId + '/ground-track');
+                var trackData = await trackRes.json();
+                
+                var trackPoints = Array.isArray(trackData) ? trackData : (trackData.track || []);
+                var segments = splitTrackOnMeridian(trackPoints);
+                
+                satTracks[activeSatId] = L.polyline(segments, { 
+                    color: TRACK_COLOR, 
+                    weight: 2, 
+                    opacity: 0.8 
+                }).addTo(map);
+                
+                updatePositions();
+                loadTimeline();
+            } catch (e) {
+                console.error("Error updating active satellite view:", e);
+            }
+        }
+
+        // --- Smooth Position Polling ---
+                    
+        
+        async function updatePositions() {
+            if (!activeSatId || !satMarkers[activeSatId]) return;
+            
+            try {
+                var res = await fetch('/satellites/' + activeSatId + '/position');
+                var pos = await res.json();
+                
+                if (pos.lat !== undefined && pos.lon !== undefined) {
+                    // 1. Move the circle marker on the map
+                    satMarkers[activeSatId].setLatLng([pos.lat, pos.lon]);
+                    
+                    // 2. Safely push coordinates to your dynamic panel (Zero raw brackets!)
+                    document.getElementById('live-lat').textContent = pos.lat.toFixed(4) + '°';
+                    document.getElementById('live-lon').textContent = pos.lon.toFixed(4) + '°';
+                    document.getElementById('live-alt').textContent = pos.alt_km.toFixed(2) + ' km';
+                    
+                    // 3. Format and display the dynamic UTC timestamp from the backend
+                    var timeString = 'N/A';
+                    if (pos.timestamp) {
+                        var dt = new Date(pos.timestamp);
+                        // Convert to a clean, readable UTC representation
+                        timeString = dt.toUTCString().replace('GMT', 'UTC');
+                    }
+                    document.getElementById('live-time').textContent = timeString;
+                }
+            } catch (e) {
+                console.error('Position update failed:', e);
+            }
+        }
+
+
+        // --- Dynamic Pass Timeline (Pure DOM) ---
+        async function loadTimeline() {
+            if (!activeSatId) return;
+            var container = document.getElementById('timeline');
+            if (!container) return;
+
+            var url = '/satellites/' + activeSatId + '/passes' + 
+                    '?lat=' + currentGS.lat + 
+                    '&lon=' + currentGS.lon + 
+                    '&alt_km=' + currentGS.alt_km;
+
+            try {
+                var response = await fetch(url);
+                var data = await response.json();
+                container.innerHTML = '';
+
+                data.passes.slice(0, 10).forEach(function(pass) {
+                    var duration = pass.duration_seconds || 600;
+                    var barWidth = Math.max(40, (duration / 600) * 200);
+                    // var aosTimeFormatted = new Date(pass.aos_time).toLocaleTimeString();
+                    var aosTimeFormatted = formatLogTime(pass.aos_time);
+
+                    var item = document.createElement('div');
+                    item.className = 'timeline-bar';
+                    item.style.display = 'flex';
+                    item.style.alignItems = 'center';
+                    item.style.margin = '4px 0';
+
+                    var labelSpan = document.createElement('span');
+                    labelSpan.className = 'label';
+                    labelSpan.style.fontSize = '0.85em';
+                    labelSpan.style.width = '140px';
+                    labelSpan.style.fontFamily = 'monospace';
+                    labelSpan.textContent = aosTimeFormatted;
+                    // labelSpan.textContent = aosTimeFormatted;
+
+                    var progressBar = document.createElement('div');
+                    progressBar.className = 'bar';
+                    progressBar.style.width = barWidth * 3 + 'px';
+                    progressBar.style.background = '#ff2a6d';
+                    progressBar.style.display = 'flex';
+                    progressBar.style.alignItems = 'center';
+                    progressBar.style.padding = '0 8px';
+                    progressBar.style.fontSize = '0.75em';
+                    progressBar.style.borderRadius = '3px';
+                    progressBar.style.height = '20px';
+                    progressBar.style.color = '#fff';
+                    progressBar.textContent = 'Elev: ' + pass.max_elevation.toFixed(1) + '° (' + Math.round(duration) + 's)';
+
+                    item.appendChild(labelSpan);
+                    item.appendChild(progressBar);
+                    container.appendChild(item);
+                });
+            } catch (error) {
+                console.error("Failed to fetch passes:", error);
+            }
+        }
+
+        // --- Dynamic Telemetry Table Loader (Pure DOM - Restored!) ---
+        async function loadTelemetry() {
+            var tbody = document.querySelector('#telemetry-table tbody');
+            if (!tbody) return;
+
+            // Fetch telemetry from the last 30 seconds
+            var pastTime = new Date(Date.now() - 30000).toISOString();
+            try {
+                var res = await fetch('/logs/telemetry?start_time=' + pastTime);
+                var logs = await res.json();
+                
+                tbody.innerHTML = ''; // Safe clear
+                
+                logs.slice(0, 20).forEach(function(row) {
+                    var tr = tbody.insertRow();
+                    tr.className = row.alarm_state; // Appends "WARNING", "CRITICAL", or "NOMINAL"
+                    
+                    var tdTime = tr.insertCell();
+                    tdTime.textContent = formatLogTime();
+
+                    var tdSat = tr.insertCell();
+                    tdSat.textContent = row.satellite_id;
+                    
+                    var tdChan = tr.insertCell();
+                    tdChan.textContent = row.channel;
+                    
+                    var tdVal = tr.insertCell();
+                    tdVal.textContent = Number(row.value).toFixed(2);
+                    
+                    var tdState = tr.insertCell();
+                    tdState.textContent = row.alarm_state;
+                });
+            } catch (e) {
+                console.error("Telemetry fetch failed:", e);
+            }
+        }
+
+        // --- Dynamic Mission Log Loader (Pure DOM - Restored!) ---
+        async function loadMissionLog() {
+            var tbody = document.querySelector('#log-table tbody');
+            if (!tbody) return;
+
+            try {
+                // Fetch both command logs and autonomous resolver action logs
+                var cmdRes = await fetch('/logs/commands');
+                var resRes = await fetch('/logs/resolver');
+                
+                var commands = await cmdRes.json();
+                var resolverActions = await resRes.json();
+                
+                // Add type tags for merging
+                var typedCmds = commands.map(function(r) {
+                    r.type = 'COMMAND';
+                    return r;
+                });
+                var typedResolvers = resolverActions.map(function(r) {
+                    r.type = 'RESOLVER';
+                    return r;
+                });
+                
+                // Merge arrays and sort by descending timestamp
+                var allLogs = typedCmds.concat(typedResolvers);
+                allLogs.sort(function(a, b) {
+                    return b.timestamp.localeCompare(a.timestamp);
+                });
+                
+                tbody.innerHTML = ''; // Safe clear
+                
+                allLogs.slice(0, 50).forEach(function(row) {
+                    var tr = tbody.insertRow();
+                    
+                    var tdTime = tr.insertCell();
+                    tdTime.textContent = formatLogTime();
+                    
+                    var tdType = tr.insertCell();
+                    tdType.textContent = row.type;
+                    
+                    var tdDetails = tr.insertCell();
+                    if (row.type === 'COMMAND') {
+                        tdDetails.textContent = row.satellite_id + ' - ' + row.task_type + ' (' + row.procedure_name + ')';
+                    } else {
+                        tdDetails.textContent = row.alert_condition + ' -> ' + row.procedure_fired;
+                    }
+                    
+                    var tdOutcome = tr.insertCell();
+                    tdOutcome.textContent = row.outcome || row.result || '';
+                });
+            } catch (e) {
+                console.error("Mission log fetch failed:", e);
+            }
+        }
+        
+        
+        async function submitCustomSatellite() {
+            var noradId = parseInt(document.getElementById('new-sat-norad').value);
+
+            if (isNaN(noradId)) {
+                alert("Please provide a valid numeric NORAD ID.");
+                return;
+            }
+
+            var payload = {
+                norad_id: noradId
+            };
+
+            try {
+                var response = await fetch('/satellites/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                var data = await response.json();
+                
+                if (response.ok) {
+                    alert("Satellite registered successfully!");
+                    
+                    // Clear input box
+                    document.getElementById('new-sat-norad').value = '';
+                    
+                    // Clear and rebuild dropdown options cleanly
+                    var selector = document.getElementById('satellite-selector');
+                    selector.innerHTML = ''; 
+                    
+                    var defaultOpt = document.createElement('option');
+                    defaultOpt.value = '';
+                    defaultOpt.textContent = '-- Select Target Spacecraft --';
+                    selector.appendChild(defaultOpt);
+                    
+                    // Repopulate with the new online-fetched name included!
+                    await initSatellites();
+                } else {
+                    alert("Registration failed: " + (data.detail || "Invalid TLE or network error."));
+                }
+            } catch (error) {
+                console.error("Failed to register satellite:", error);
+            }
+        }
+
+
+        // --- 1. Adjust Value by 0.1 while keeping precise trailing decimals ---
+        function adjustCoordinate(inputId, amount) {
+            var inputElement = document.getElementById(inputId);
+            if (!inputElement) return;
+
+            var currentValue = parseFloat(inputElement.value) || 0;
+            
+            // Perform pure addition/subtraction to avoid native browser snapping
+            var newValue = currentValue + amount;
+            
+            // Set the input field to the new calculation, formatted to 4 decimal places
+            inputElement.value = newValue.toFixed(4);
+            
+            // Instantly update the coordinates on the Leaflet map and recalculate passes
+            updateGroundStationFromInputs();
+        }
+
+        // --- 2. Bind keyboard Arrow Up/Down to preserve decimals when focused ---
+        function registerKeyboardAdjusters() {
+            var latInput = document.getElementById('gs-lat');
+            var lonInput = document.getElementById('gs-lon');
+
+            var handleArrowKeys = function(event) {
+                if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                    event.preventDefault(); // Stop the browser's default decimal-snapping behavior
+                    
+                    var amount = 0.1;
+                    if (event.key === 'ArrowDown') {
+                        amount = -0.1;
+                    }
+                    
+                    // Adjust the active element's value
+                    adjustCoordinate(this.id, amount);
+                }
+            };
+
+            if (latInput) latInput.addEventListener('keydown', handleArrowKeys);
+            if (lonInput) lonInput.addEventListener('keydown', handleArrowKeys);
+        }
+
+        // --- Startup Execution & Polling Loops ---
+        initSatellites().then(function() {
+            // Dynamically populate input fields with the last persisted coordinates!
+            document.getElementById('gs-lat').value = currentGS.lat;
+            document.getElementById('gs-lon').value = currentGS.lon;
+            
+            drawGroundStation();
+            registerKeyboardAdjusters();
+        });
+
+        // Position updates every 5 seconds
+        setInterval(updatePositions, 1000);
+
+        // Recalculate pass timelines every 30 seconds
+        setInterval(loadTimeline, 15000);
+
+        // Populate Telemetry Panel every 5 seconds
+        loadTelemetry();
+        setInterval(loadTelemetry, 1000);
+
+        // Populate Mission Audit Log every 10 seconds
+        loadMissionLog();
+        setInterval(loadMissionLog, 5000);
+
+    </script>
+</body>
+</html>

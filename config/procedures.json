@@ -1,0 +1,80 @@
+{
+    "procedures": [
+        {
+            "name": "battery_recovery",
+            "description": "Reset battery controller to recover nominal voltage",
+            "steps": [
+                {
+                    "name": "verify_adcs_safe",
+                    "action": "switch_adcs_nominal",
+                    "precondition": "adcs_mode != NOMINAL",
+                    "timeout_seconds": 10.0
+                },
+                {
+                    "name": "reset_battery",
+                    "action": "reset_battery_controller",
+                    "timeout_seconds": 15.0
+                }
+            ]
+        },
+        {
+            "name": "thermal_protection",
+            "description": "Activate heater to recover OBC temperature",
+            "steps": [
+                {
+                    "name": "activate_heater",
+                    "action": "activate_heater",
+                    "timeout_seconds": 10.0
+                }
+            ]
+        },
+        {
+            "name": "comms_recovery",
+            "description": "Reset communications subsystem",
+            "steps": [
+                {
+                    "name": "reset_comms_module",
+                    "action": "reset_comms",
+                    "timeout_seconds": 10.0
+                }
+            ]
+        },
+        {
+            "name": "full_health_check",
+            "description": "Run complete satellite health verification",
+            "steps": [
+                {
+                    "name": "reset_battery",
+                    "action": "reset_battery_controller",
+                    "timeout_seconds": 10.0
+                },
+                {
+                    "name": "stabilize_thermal",
+                    "action": "activate_heater",
+                    "timeout_seconds": 10.0
+                },
+                {
+                    "name": "verify_comms",
+                    "action": "reset_comms",
+                    "timeout_seconds": 10.0
+                }
+            ]
+        },
+        {
+            "name": "emergency_power_cycle",
+            "description": "Emergency OBC power cycle for critical failures",
+            "steps": [
+                {
+                    "name": "power_cycle",
+                    "action": "power_cycle_obc",
+                    "timeout_seconds": 20.0
+                },
+                {
+                    "name": "verify_nominal",
+                    "action": "switch_adcs_nominal",
+                    "timeout_seconds": 10.0
+                }
+            ]
+        }
+    ]
+}

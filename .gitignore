@@ -1,0 +1,17 @@
+commands.txt
+outline0.txt
+outline1.txt
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local development files
+.env
+
+# Virtual environments
+venv_linux/
+venv/
+ENV/

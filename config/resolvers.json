@@ -1,0 +1,28 @@
+{
+    "rules": [
+        {
+            "name": "low_battery_resolver",
+            "parameter": "battery_voltage",
+            "severity": "WARNING",
+            "procedure_name": "battery_recovery"
+        },
+        {
+            "name": "critical_battery_resolver",
+            "parameter": "battery_voltage",
+            "severity": "CRITICAL",
+            "procedure_name": "emergency_power_cycle"
+        },
+        {
+            "name": "thermal_warning_resolver",
+            "parameter": "obc_temperature",
+            "severity": "WARNING",
+            "procedure_name": "thermal_protection"
+        },
+        {
+            "name": "comms_degraded_resolver",
+            "parameter": "comms_signal_strength",
+            "severity": "WARNING",
+            "procedure_name": "comms_recovery"
+        }
+    ]
+}

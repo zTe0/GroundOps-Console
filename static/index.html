@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GroundOps Console</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; background: #0a0e14; color: #c5c8c6; padding: 20px; }
+        h1 { color: #66d9ef; margin-bottom: 20px; font-size: 1.4rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .card { background: #1a1f29; border: 1px solid #2a3040; border-radius: 8px; padding: 16px; }
+        .card h2 { color: #a6e22e; font-size: 0.9rem; margin-bottom: 12px; text-transform: uppercase; }
+        .metric { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #2a3040; }
+        .metric:last-child { border-bottom: none; }
+        .label { color: #888; }
+        .value { font-weight: bold; }
+        .nominal { color: #a6e22e; }
+        .warning { color: #e6db74; }
+        .critical { color: #f92672; }
+        .status-bar { background: #1a1f29; border: 1px solid #2a3040; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #888; }
+        .status-dot.connected { background: #a6e22e; }
+        .log { background: #1a1f29; border: 1px solid #2a3040; border-radius: 8px; padding: 16px; max-height: 300px; overflow-y: auto; }
+        .log h2 { color: #a6e22e; font-size: 0.9rem; margin-bottom: 12px; text-transform: uppercase; }
+        .log-entry { font-size: 0.8rem; padding: 4px 0; border-bottom: 1px solid #1a1f29; }
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #16213e;
+            padding: 10px 20px;
+            border-bottom: 2px solid #0f9d58;
+        }
+        .header-container h1 {
+            padding: 0;
+            background: transparent;
+        }
+        .nav-button {
+            background: #0f9d58;
+            color: #fff;
+            text-decoration: none;
+            padding: 8px 16px;
+            font-family: monospace;
+            font-weight: bold;
+            border-radius: 4px;
+            border: 1px solid #10b981;
+            transition: background 0.2s ease;
+        }
+        .nav-button:hover {
+            background: #10b981;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>GroundOps Console - Telemetry Monitor</h1>
+    <div class="status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Connecting...</span>
+    </div>
+    <div class="grid">
+        <div class="card">
+            <h2>Battery</h2>
+            <div class="metric">
+                <span class="label">Voltage</span>
+                <span class="value" id="batteryVoltage">--</span>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Thermal</h2>
+            <div class="metric">
+                <span class="label">OBC Temp</span>
+                <span class="value" id="obcTemperature">--</span>
+            </div>
+        </div>
+        <div class="card">
+            <h2>ADCS</h2>
+            <div class="metric">
+                <span class="label">Mode</span>
+                <span class="value" id="adcsMode">--</span>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Communications</h2>
+            <div class="metric">
+                <span class="label">Signal</span>
+                <span class="value" id="commsSignal">--</span>
+            </div>
+        </div>
+    </div>
+    <div class="log">
+        <h2>Event Log</h2>
+        <div id="logEntries"></div>
+    </div>
+    <div class="header-container">
+        <a href="/" class="nav-button">⬅ Return to Mission Dashboard</a>
+    </div>
+    <script>
+        const ws = new WebSocket(`ws://${window.location.host}/ws/telemetry`);
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const logEntries = document.getElementById('logEntries');
+
+        const limits = {
+            battery_voltage: { warning_low: 24.0, warning_high: 30.0, critical_low: 22.0, critical_high: 31.0 },
+            obc_temperature: { warning_low: 5.0, warning_high: 45.0, critical_low: 0.0, critical_high: 50.0 },
+            comms_signal_strength: { warning_low: -100.0, critical_low: -110.0 }
+        };
+
+        function getSeverityClass(value, paramLimits) {
+            if (paramLimits.critical_low !== undefined && value <= paramLimits.critical_low) return 'critical';
+            if (paramLimits.critical_high !== undefined && value >= paramLimits.critical_high) return 'critical';
+            if (paramLimits.warning_low !== undefined && value <= paramLimits.warning_low) return 'warning';
+            if (paramLimits.warning_high !== undefined && value >= paramLimits.warning_high) return 'warning';
+            return 'nominal';
+        }
+
+        ws.onopen = () => {
+            statusDot.classList.add('connected');
+            statusText.textContent = 'Connected - Receiving telemetry';
+            addLog('WebSocket connected');
+        };
+
+        ws.onclose = () => {
+            statusDot.classList.remove('connected');
+            statusText.textContent = 'Disconnected';
+            addLog('WebSocket disconnected');
+        };
+
+        ws.onmessage = (event) => {
+            const frame = JSON.parse(event.data);
+            updateTelemetry(frame);
+        };
+
+        function updateTelemetry(frame) {
+            const battEl = document.getElementById('batteryVoltage');
+            const tempEl = document.getElementById('obcTemperature');
+            const adcsEl = document.getElementById('adcsMode');
+            const commsEl = document.getElementById('commsSignal');
+
+            battEl.textContent = frame.battery_voltage.toFixed(2) + ' V';
+            battEl.className = 'value ' + getSeverityClass(frame.battery_voltage, limits.battery_voltage);
+
+            tempEl.textContent = frame.obc_temperature.toFixed(2) + ' C';
+            tempEl.className = 'value ' + getSeverityClass(frame.obc_temperature, limits.obc_temperature);
+
+            adcsEl.textContent = frame.adcs_mode;
+            adcsEl.className = 'value nominal';
+
+            commsEl.textContent = frame.comms_signal_strength.toFixed(2) + ' dBm';
+            commsEl.className = 'value ' + getSeverityClass(frame.comms_signal_strength, limits.comms_signal_strength);
+        }
+
+        function addLog(message) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${new Date().toISOString().substr(11, 8)}] ${message}`;
+            logEntries.prepend(entry);
+            if (logEntries.children.length > 50) {
+                logEntries.removeChild(logEntries.lastChild);
+            }
+        }
+    </script>
+</body>
+</html>

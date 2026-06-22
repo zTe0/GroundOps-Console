@@ -1,0 +1,7 @@
+# Render Blueprint for GroundOps Console
+services:
+  - type: web
+    name: groundops-console
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
