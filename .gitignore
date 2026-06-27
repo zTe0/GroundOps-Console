@@ -13,3 +13,4 @@ venv/
 ENV/
 
 static/old/
+*.sqlite

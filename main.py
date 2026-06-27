@@ -75,8 +75,12 @@ async def lifespan(app: FastAPI):
     # 2. Schedule background tasks using the Safe Runner
     asyncio.create_task(safe_task_runner(telemetry_loop(), "Telemetry Monitor"))
     asyncio.create_task(safe_task_runner(pass_monitor(), "Pass Monitor"))
-    
+    asyncio.create_task(safe_task_runner(persistence.snapshot_loop(10), "DB Snapshot"))
+
     yield
+
+    # Close DB cleanly on shutdown
+    await persistence.close_db()
 
 async def telemetry_loop():
     while True:
